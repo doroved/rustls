@@ -367,7 +367,8 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
 
 impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
     fn from(value: &DnsName<'a>) -> Self {
-        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+        // Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+        Self::SingleDnsName(value.to_owned()) // #PATH
     }
 }
 
