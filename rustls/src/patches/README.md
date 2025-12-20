@@ -1,6 +1,5 @@
 # Patches rustls
 
-
 Получаем теги оригинального репозитория и переключаемся на нужную версию
 ```bash
 git remote add upstream https://github.com/rustls/rustls.git
@@ -8,11 +7,70 @@ git fetch upstream --tags
 git checkout v/0.23.35
 ```
 
+Вот компактная шпаргалка, которую можно сохранить в `README` вашего форка или в заметки. Она разделена на этапы: от первой настройки до регулярного обновления.
+
+---
+
+## 📑 Шпаргалка по поддержке патчей в Rustls
+
+### 1. Подготовка (делается один раз)
+
+Добавляем оригинальный репозиторий как источник обновлений.
+
+```bash
+git remote add upstream https://github.com/rustls/rustls.git
+git fetch upstream --tags
+
+```
+---
+
+### 2. Создание новой ветки под версию (например, 0.24.0)
+
+Когда выходит новая версия, на которую вы хотите переехать:
+
+```bash
+# 1. Забираем свежие теги
+git fetch upstream --tags
+
+# 2. Создаем новую ветку от нового тега
+git checkout v/0.24.0 -b patches-v0.24.0
+
+# 3. Переносим (перебазируем) патчи со старой ветки (v0.23.35) на новую
+# Предположим, ваша старая ветка называлась patches-v0.23.35
+git rebase --onto patches-v0.24.0 v/0.23.35 patches-v0.23.35
+
+```
+
+> **Примечание по команде `rebase --onto**`: Она берет все коммиты, которые были в `patches-v0.23.35` (но которых нет в теге `v/0.23.35`), и "переклеивает" их на новую ветку `patches-v0.24.0`.
+
+---
+
+### 3. Разрешение конфликтов (если возникли)
+
+Если код `rustls` сильно изменился, Git остановит ребейз.
+
+1. Посмотрите файлы с конфликтами: `git status`
+2. Исправьте код в редакторе.
+3. Добавьте исправленные файлы: `git add .`
+4. Продолжите процесс: `git rebase --continue`
+*(Повторяйте, пока все коммиты не перенесутся)*.
+
+---
+
+Устанавливаем репозиторий по умолчанию
+```
+gh repo set-default
+```
+Меняем ветку по дефолту на новую
+```
+gh repo edit --default-branch patches-v0.24.0
+```
+
 В проекте в Cargo.toml подключаем патчи
 ```toml
 [patch.crates-io]
 # Ваш патч для rustls
-rustls = { git = 'https://github.com/doroved/rustls.git' }
+rustls = { git = "https://github.com/doroved/rustls.git", branch = "patches-v0.23.35" }
 # Вы также должны явно добавить патч для pki-types сюда!
-rustls-pki-types = { git = 'https://github.com/doroved/pki-types.git' }
+rustls-pki-types = { git = "https://github.com/doroved/pki-types.git", branch = "patches-v1.13.1" }
 ```
