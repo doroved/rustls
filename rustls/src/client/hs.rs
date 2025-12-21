@@ -380,6 +380,15 @@ fn emit_client_hello_for_retry(
         extensions: exts,
     };
 
+    // #PATCH
+    crate::patches::webkit::apply_webkit_fingerprint(&mut chp_payload);
+    // #PATCH | Не работает в MAGIC MODE
+    // input.hello.alpn_protocols = chp_payload
+    //     .extensions
+    //     .protocols
+    //     .clone()
+    //     .unwrap_or_default();
+
     let ech_grease_ext = config
         .ech_mode
         .as_ref()
@@ -421,7 +430,8 @@ fn emit_client_hello_for_retry(
     }
 
     // Note what extensions we sent.
-    input.hello.sent_extensions = chp_payload.collect_used();
+    // input.hello.sent_extensions = chp_payload.collect_used();
+    input.hello.sent_extensions = chp_payload.used_extensions_in_encoding_order(); // #PATCH
 
     let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 

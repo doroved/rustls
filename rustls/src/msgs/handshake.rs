@@ -368,7 +368,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
 impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
     fn from(value: &DnsName<'a>) -> Self {
         // Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
-        Self::SingleDnsName(value.to_owned()) // #PATH
+        Self::SingleDnsName(value.to_owned()) // #PATCH
     }
 }
 
@@ -934,6 +934,9 @@ extension_struct! {
 
         /// Extensions that must appear contiguously.
         pub(crate) contiguous_extensions: Vec<ExtensionType>,
+
+        /// Custom extensions. #PATCH
+        pub(crate) custom_extensions: Vec<crate::patches::webkit::UnknownExtension>,
     }
 }
 
@@ -965,6 +968,7 @@ impl ClientExtensions<'_> {
             encrypted_client_hello_outer,
             order_seed,
             contiguous_extensions,
+            custom_extensions, // #PATCH
         } = self;
         ClientExtensions {
             server_name: server_name.map(|x| x.into_owned()),
@@ -992,6 +996,7 @@ impl ClientExtensions<'_> {
             encrypted_client_hello_outer,
             order_seed,
             contiguous_extensions,
+            custom_extensions, // #PATCH
         }
     }
 
@@ -1029,6 +1034,13 @@ impl ClientExtensions<'_> {
     ///   are required to be last by the standard.
     fn order_insensitive_extensions_in_random_order(&self) -> Vec<ExtensionType> {
         let mut order = self.collect_used();
+        // #START_PATCH
+        for ext in &self.custom_extensions {
+            if !order.contains(&ext.typ) {
+                order.push(ext.typ);
+            }
+        }
+        // #END_PATCH
 
         // Remove extensions which have specific order requirements.
         order.retain(|ext| {
@@ -1059,7 +1071,18 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
 
         let body = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         for item in order {
-            self.encode_one(item, body.buf);
+            // self.encode_one(item, body.buf);
+            // #START_PATCH
+            if let Some(custom) = self
+                .custom_extensions
+                .iter()
+                .find(|e| e.typ == item)
+            {
+                custom.encode(body.buf);
+            } else {
+                self.encode_one(item, body.buf);
+            }
+            // #END_PATCH
         }
     }
 
