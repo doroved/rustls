@@ -22,20 +22,17 @@ fn main() {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    // ВАЖНО: Добавьте ALPN протоколы здесь
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-
     // Allow using SSLKEYLOGFILE.
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    let server_name = "github.com".try_into().unwrap();
+    let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-    let mut sock = TcpStream::connect("github.com:443").unwrap();
+    let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",
-            "Host: github.com\r\n",
+            "Host: www.rust-lang.org\r\n",
             "Connection: close\r\n",
             "Accept-Encoding: identity\r\n",
             "\r\n"
