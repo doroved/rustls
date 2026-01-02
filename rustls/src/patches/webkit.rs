@@ -1,79 +1,26 @@
+use crate::CertificateCompressionAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ExtensionType, NamedGroup};
-use crate::msgs::handshake::{
-    CertificateStatusRequest, ClientHelloPayload, KeyShareEntry, OcspCertificateStatusRequest,
-};
-use crate::{CertificateCompressionAlgorithm, error::InvalidMessage};
+use crate::msgs::handshake::{ClientHelloPayload, KeyShareEntry, ProtocolName};
+use crate::patches::UnknownExtension;
+use crate::patches::grease::{GREASE_VALUES, get_grease_value};
 use alloc::vec;
 use alloc::vec::Vec;
-use rand::Rng;
 use rand::seq::IndexedRandom;
 
-// GREASE значения согласно RFC 8701
-// |Hex pair   |Decimal|
-// |-----------|-------|
-// |{0x0A,0x0A}|2570   |
-// |{0x1A,0x1A}|6682   |
-// |{0x2A,0x2A}|10794  |
-// |{0x3A,0x3A}|14906  |
-// |{0x4A,0x4A}|19018  |
-// |{0x5A,0x5A}|23130  |
-// |{0x6A,0x6A}|27242  |
-// |{0x7A,0x7A}|31354  |
-// |{0x8A,0x8A}|35466  |
-// |{0x9A,0x9A}|39578  |
-// |{0xAA,0xAA}|43690  |
-// |{0xBA,0xBA}|47802  |
-// |{0xCA,0xCA}|51914  |
-// |{0xDA,0xDA}|56026  |
-// |{0xEA,0xEA}|60138  |
-// |{0xFA,0xFA}|64250  |
-const GREASE_VALUES: [u16; 16] = [
-    0x0A0A, 0x1A1A, 0x2A2A, 0x3A3A, 0x4A4A, 0x5A5A, 0x6A6A, 0x7A7A, 0x8A8A, 0x9A9A, 0xAAAA, 0xBABA,
-    0xCACA, 0xDADA, 0xEAEA, 0xFAFA,
-];
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct UnknownExtension {
-    pub(crate) typ: ExtensionType,
-    pub(crate) payload: Payload<'static>,
-}
-
-impl Codec<'_> for UnknownExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        let payload_bytes = self.payload.bytes();
-        ((payload_bytes.len()) as u16).encode(bytes);
-        bytes.extend_from_slice(payload_bytes);
-    }
-
-    fn read(_r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Err(InvalidMessage::MissingData("UnknownExtension"))
-    }
-}
-
-fn get_grease_value<R: Rng>(rng: &mut R) -> u16 {
-    let index = rng.random_range(0..GREASE_VALUES.len());
-    GREASE_VALUES[index]
-}
-
-pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
+pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload, no_alpn: bool) {
     let mut rng = rand::rng();
 
-    // Generate unique grease values for different components.
-    // Safari typically uses:
-    // 1 value for Extension Type 1
-    // 1 value for Extension Type 2
-    // 1 value shared for Supported Groups, Key Share
+    // Generate unique GREASE values for two extensions
     let grease_pool = GREASE_VALUES
-        .choose_multiple(&mut rng, 3)
+        .choose_multiple(&mut rng, 2)
         .collect::<Vec<_>>();
 
     let grease_ext1 = *grease_pool[0];
     let grease_ext2 = *grease_pool[1];
-    let grease_shared_inner = *grease_pool[2]; // Shared for groups, key_share
+    let grease_shared_group = get_grease_value(&mut rng); // Shared for groups, key_share
     let grease_cipher = get_grease_value(&mut rng);
     let grease_version = get_grease_value(&mut rng);
 
@@ -140,7 +87,7 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
 
     // 2.5 supported_groups
     payload.extensions.named_groups = Some(vec![
-        NamedGroup::Unknown(grease_shared_inner),
+        NamedGroup::Unknown(grease_shared_group),
         NamedGroup::X25519,
         NamedGroup::secp256r1,
         NamedGroup::secp384r1,
@@ -158,7 +105,13 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
         .push(ExtensionType::ECPointFormats);
 
     // 2.7 application_layer_protocol_negotiation
-    if payload.extensions.protocols.is_some() {
+    if !no_alpn {
+        if payload.extensions.protocols.is_none() {
+            payload.extensions.protocols = Some(vec![
+                ProtocolName::from(b"h2".to_vec()),
+                ProtocolName::from(b"http/1.1".to_vec()),
+            ]);
+        }
         payload
             .extensions
             .contiguous_extensions
@@ -166,14 +119,6 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
     }
 
     // 2.8 status_request (OCSP)
-    payload
-        .extensions
-        .certificate_status_request = Some(CertificateStatusRequest::Ocsp(
-        OcspCertificateStatusRequest {
-            responder_ids: vec![],
-            extensions: PayloadU16::empty(),
-        },
-    ));
     payload
         .extensions
         .contiguous_extensions
@@ -202,7 +147,7 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
 
     // 2.11 key_share
     if let Some(shares) = &mut payload.extensions.key_shares {
-        let grease_entry = KeyShareEntry::new(NamedGroup::Unknown(grease_shared_inner), vec![0x00]);
+        let grease_entry = KeyShareEntry::new(NamedGroup::Unknown(grease_shared_group), vec![0x00]);
 
         // Оставляем только X25519
         shares.retain(|share| share.group == NamedGroup::X25519);
@@ -225,10 +170,10 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload) {
     // 2.13 supported_versions
     let mut ver_payload = vec![0x0a]; // length 10 (5 versions * 2 bytes)
     ver_payload.extend_from_slice(&grease_version.to_be_bytes());
-    ver_payload.extend_from_slice(&0x0304u16.to_be_bytes());
-    ver_payload.extend_from_slice(&0x0303u16.to_be_bytes());
-    ver_payload.extend_from_slice(&0x0302u16.to_be_bytes());
-    ver_payload.extend_from_slice(&0x0301u16.to_be_bytes());
+    ver_payload.extend_from_slice(&0x0304u16.to_be_bytes()); // TLS 1.3
+    ver_payload.extend_from_slice(&0x0303u16.to_be_bytes()); // TLS 1.2
+    ver_payload.extend_from_slice(&0x0302u16.to_be_bytes()); // TLS 1.1
+    ver_payload.extend_from_slice(&0x0301u16.to_be_bytes()); // TLS 1.0
 
     // Удаляем стандартный supported_versions и заменяем кастомным
     payload.extensions.supported_versions = None;

@@ -281,6 +281,12 @@ pub struct ClientConfig {
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
     pub(super) ech_mode: Option<EchMode>,
+
+    /// The TLS fingerprint to use.
+    pub fingerprint: Option<crate::patches::TlsFingerprint>, // #PATCH
+
+    /// If true, ALPN extension will not be added to the packet.
+    pub no_alpn: bool, // #PATCH
 }
 
 impl ClientConfig {

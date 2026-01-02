@@ -935,8 +935,8 @@ extension_struct! {
         /// Extensions that must appear contiguously.
         pub(crate) contiguous_extensions: Vec<ExtensionType>,
 
-        /// Custom extensions. #PATCH
-        pub(crate) custom_extensions: Vec<crate::patches::webkit::UnknownExtension>,
+        /// Custom extensions.
+        pub(crate) custom_extensions: Vec<crate::patches::UnknownExtension>, // #PATCH
     }
 }
 
@@ -1727,7 +1727,12 @@ impl<'a> Codec<'a> for CertificateExtensions<'a> {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |_unk| {
+            out.read_one(&mut sub, |unk| {
+                // #START_PATCH
+                if unk == ExtensionType::SCT {
+                    return Ok(());
+                }
+                // #END_PATCH
                 Err(InvalidMessage::UnknownCertificateExtension)
             })?;
         }

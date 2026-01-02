@@ -716,5 +716,5 @@ mod hash_map {
     pub(crate) use hashbrown::hash_map::Entry;
 }
 
-// #PATCH
-pub(crate) mod patches;
+pub(crate) mod patches; // #PATCH
+pub use patches::TlsFingerprint; // #PATCH

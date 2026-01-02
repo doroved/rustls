@@ -181,6 +181,8 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             ech_mode: self.state.client_ech_mode,
+            fingerprint: None, // #PATCH
+            no_alpn: false,    // #PATCH
         }
     }
 }

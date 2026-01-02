@@ -381,13 +381,23 @@ fn emit_client_hello_for_retry(
     };
 
     // #PATCH
-    crate::patches::webkit::apply_webkit_fingerprint(&mut chp_payload);
-    // #PATCH | Не работает в MAGIC MODE
-    // input.hello.alpn_protocols = chp_payload
-    //     .extensions
-    //     .protocols
-    //     .clone()
-    //     .unwrap_or_default();
+    if let Some(fingerprint) = &config.fingerprint {
+        match fingerprint {
+            crate::patches::TlsFingerprint::Chrome => {
+                crate::patches::chrome::apply_chrome_fingerprint(&mut chp_payload, config.no_alpn);
+            }
+            crate::patches::TlsFingerprint::Webkit => {
+                crate::patches::webkit::apply_webkit_fingerprint(&mut chp_payload, config.no_alpn);
+            }
+        }
+    }
+
+    // #PATCH
+    input.hello.alpn_protocols = chp_payload
+        .extensions
+        .protocols
+        .clone()
+        .unwrap_or_default();
 
     let ech_grease_ext = config
         .ech_mode
