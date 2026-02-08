@@ -30,6 +30,7 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 #[path = "../ring/kx.rs"]
 pub(crate) mod kx;
+pub(crate) mod kx_p521; // #PATCH
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
 #[cfg(feature = "std")]
@@ -235,6 +236,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 /// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
+    pub use super::kx_p521::SECP521R1; // #PATCH
     pub use super::pq::{MLKEM768, SECP256R1MLKEM768, X25519MLKEM768};
 }
 
@@ -248,6 +250,7 @@ pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,
+    kx_group::SECP521R1, // #PATCH
     #[cfg(not(feature = "prefer-post-quantum"))]
     kx_group::X25519MLKEM768,
 ];
@@ -261,6 +264,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,
+    kx_group::SECP521R1, // #PATCH
     #[cfg(not(feature = "prefer-post-quantum"))]
     kx_group::X25519MLKEM768,
     #[cfg(not(feature = "prefer-post-quantum"))]

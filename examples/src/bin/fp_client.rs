@@ -15,6 +15,9 @@ use std::sync::Arc;
 use rustls::RootCertStore;
 
 fn main() {
+    // Добавьте эту строку первой
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
@@ -34,11 +37,21 @@ fn main() {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     // Run RUST_LOG=trace cargo run --bin simpleclient
+    // RUST_LOG=rustls=trace cargo run --bin fp_client
 
     // let host = "example.com"; // Поддерживает SCT, ECH
     // let host = "cloudflare.com"; // Поддерживает ECH
     // let host = "vk.com";
-    let host = "github.com";
+    // let host = "github.com";
+
+    // let host = "www.idownloadblog.com"; // !!! решено IllegalParameter, т.к. была неправильная обработка HRR (HelloRetryRequest)
+    // let host = "omega.bz"; // !!! решено IllegalParameter, т.к. была неправильная обработка HRR (HelloRetryRequest)
+    // let host = "app-files.trelica.com"; // !!! решено IllegalParameter, т.к. была неправильная обработка HRR (HelloRetryRequest)
+    // let host = "fazhzcezbdj.xh8007l.ws"; // InternalError | Похоже проблема в том, что сервер поддерживает только TLS 1.2
+    // let host = "officeci-mauservice.azurewebsites.net"; // !!! решено  IllegalHelloRetryRequestWithUnofferedNamedGroup
+    // let host = "mobile.events.data.microsoft.com"; // Этот по идее работает, нужна проверка
+    let host = "appservicelandingpage.trafficmanager.net"; // !!! решено IllegalHelloRetryRequestWithUnofferedNamedGroup
+
     // let host = "speed.cloudflare.com"; // http/1.1, Поддерживает ECH
     // let host = "www.youtube.com"; //
     // let host = "rr14---sn-n8v7kn7l.googlevideo.com"; // пустой ALPN

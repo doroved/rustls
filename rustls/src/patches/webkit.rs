@@ -8,10 +8,24 @@ use crate::patches::UnknownExtension;
 use crate::patches::grease::{GREASE_VALUES, get_grease_value};
 use alloc::vec;
 use alloc::vec::Vec;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rand::seq::IndexedRandom;
 
 pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload, no_alpn: bool) {
-    let mut rng = rand::rng();
+    // 1. Инициализируем RNG на основе Session ID.
+    // Session ID не меняется между ClientHello и HelloRetryRequest.
+    // Это гарантирует, что GREASE значения будут стабильными в рамках одного хендшейка.
+    let mut seed = [0u8; 32];
+    let session_id = payload.session_id.as_ref(); // Получаем байты Session ID
+    if session_id.len() <= 32 {
+        seed[..session_id.len()].copy_from_slice(session_id);
+    } else {
+        seed.copy_from_slice(&session_id[..32]);
+    }
+
+    // Используем StdRng с нашим seed'ом
+    let mut rng = StdRng::from_seed(seed);
 
     // Generate unique GREASE values for two extensions
     let grease_pool = GREASE_VALUES
@@ -23,6 +37,16 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload, no_alpn
     let grease_shared_group = get_grease_value(&mut rng); // Shared for groups, key_share
     let grease_cipher = get_grease_value(&mut rng);
     let grease_version = get_grease_value(&mut rng);
+
+    // 2. ДЕТЕКТОР HRR (Второй ClientHello)
+    // В первом запросе Rustls генерирует > 1 ключа (X25519, P-256).
+    // Во втором (после HRR) - только один (выбранный сервером).
+    // Также наличие Cookie говорит о HRR.
+    let is_retry = if let Some(shares) = &payload.extensions.key_shares {
+        shares.len() == 1 || payload.extensions.cookie.is_some()
+    } else {
+        false
+    };
 
     // 1. Cipher Suites
     payload.cipher_suites = vec![
@@ -147,13 +171,23 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload, no_alpn
 
     // 2.11 key_share
     if let Some(shares) = &mut payload.extensions.key_shares {
-        let grease_entry = KeyShareEntry::new(NamedGroup::Unknown(grease_shared_group), vec![0x00]);
+        // println!("Shares Before: {:#?}", shares);
+        if !is_retry {
+            // === CH1 (Первый запрос) ===
+            // 1. Оставляем только X25519 (удаляем P-256 и прочее)
+            // Тот самый retain, который "нужно оставлять" для первого запроса
+            shares.retain(|share| share.group == NamedGroup::X25519);
 
-        // Оставляем только X25519
-        shares.retain(|share| share.group == NamedGroup::X25519);
-
-        // Вставляем GREASE в начало
-        shares.insert(0, grease_entry);
+            // 2. Добавляем GREASE
+            let grease_entry =
+                KeyShareEntry::new(NamedGroup::Unknown(grease_shared_group), vec![0x00]);
+            shares.insert(0, grease_entry);
+        } else {
+            // === CH2 (После HRR) ===
+            // 1. НЕ делаем retain! Оставляем то, что там есть (secp256r1).
+            // 2. НЕ добавляем GREASE (так в Сафари во втором пакете).
+        }
+        // println!("Shares After: {:#?}", shares);
 
         payload
             .extensions
@@ -192,16 +226,19 @@ pub(crate) fn apply_webkit_fingerprint(payload: &mut ClientHelloPayload, no_alpn
     add_custom_ext(payload, grease_ext2, vec![0x00]);
 
     // 2.16 padding
-    let mut temp = Vec::new();
-    payload.encode(&mut temp);
+    // Добавляем ТОЛЬКО в первом CH
+    if !is_retry {
+        let mut temp = Vec::new();
+        payload.encode(&mut temp);
 
-    let current_total_len = temp.len();
-    let target_len = 512;
+        let current_total_len = temp.len();
+        let target_len = 512;
 
-    if current_total_len < target_len {
-        let pad_len = target_len - current_total_len - 8;
-        if pad_len > 0 {
-            add_custom_ext(payload, 0x0015, vec![0u8; pad_len]);
+        if current_total_len < target_len {
+            let pad_len = target_len - current_total_len - 8;
+            if pad_len > 0 {
+                add_custom_ext(payload, 0x0015, vec![0u8; pad_len]);
+            }
         }
     }
 }

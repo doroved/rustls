@@ -11,18 +11,19 @@ use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
 
 /// A key-exchange group supported by *ring*.
-struct KxGroup {
+// #PATCH pub(crate)
+pub(crate) struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
-    name: NamedGroup,
+    pub(crate) name: NamedGroup, // #PATCH pub(crate)
 
     /// The corresponding ring agreement::Algorithm
-    agreement_algorithm: &'static agreement::Algorithm,
+    pub(crate) agreement_algorithm: &'static agreement::Algorithm, // #PATCH pub(crate)
 
     /// Whether the algorithm is allowed by FIPS
     ///
     /// `SupportedKxGroup::fips()` is true if and only if the algorithm is allowed,
     /// _and_ the implementation is FIPS-validated.
-    fips_allowed: bool,
+    pub(crate) fips_allowed: bool, // #PATCH pub(crate)
 
     /// aws-lc-rs 1.9 and later accepts more formats of public keys than
     /// just uncompressed.
@@ -36,7 +37,7 @@ struct KxGroup {
     /// is consistent with an uncompressed point encoding.  It does not need
     /// to verify that the point is on the curve (if the curve requires that
     /// for security); aws-lc-rs/ring must do that.
-    pub_key_validator: fn(&[u8]) -> bool,
+    pub(crate) pub_key_validator: fn(&[u8]) -> bool, // #PATCH pub(crate)
 }
 
 impl SupportedKxGroup for KxGroup {
@@ -108,7 +109,8 @@ pub static SECP384R1: &dyn SupportedKxGroup = &KxGroup {
     pub_key_validator: uncompressed_point,
 };
 
-fn uncompressed_point(point: &[u8]) -> bool {
+// #PATCH pub(crate)
+pub(crate) fn uncompressed_point(point: &[u8]) -> bool {
     // See `UncompressedPointRepresentation`, which is a retelling of
     // SEC1 section 2.3.3 "Elliptic-Curve-Point-to-Octet-String Conversion"
     // <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8.2>
