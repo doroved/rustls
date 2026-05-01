@@ -300,6 +300,21 @@ fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
 
 Это предотвращает ошибки `UnknownCertificateExtension`, когда серверы отправляют Signed Certificate Timestamps (SCT) или другие нестандартные расширения сертификатов.
 
+### 4. Сохранение trailing dots в SNI
+
+В `msgs/handshake.rs` изменён `From<&DnsName>` для `ServerNamePayload`:
+
+```rust
+impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
+    fn from(value: &DnsName<'a>) -> Self {
+        // Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+        Self::SingleDnsName(value.to_owned()) // #PATCH: preserve trailing dots
+    }
+}
+```
+
+Стандартный rustls обрезает trailing dot в SNI (RFC6066). Этот патч сохраняет его, что позволяет использовать домены с двойной точкой в конце для обхода блокировок по SNI.
+
 ---
 
 ## Поддержка SECP521R1 (P-521)
@@ -397,14 +412,14 @@ let config = ClientConfig::builder()
 
 | Файл | Изменение |
 |------|-----------|
+| `rustls/Cargo.toml` | `zlib` добавлен в `default` features |
 | `rustls/src/client/fingerprint/mod.rs` | Новое определение трейта |
 | `rustls/src/client/fingerprint/safari.rs` | Реализация Safari fingerprint |
 | `rustls/src/client/fingerprint/grease.rs` | GREASE RNG |
 | `rustls/src/client/client_conn.rs` | Добавлено поле fingerprint в ClientConfig |
 | `rustls/src/client/builder.rs` | Builder-метод `with_fingerprint()` |
-| `rustls/src/client/hs.rs` | Применение fingerprint + фикс ALPN-трекинга |
 | `rustls/src/msgs/macros.rs` | Поддержка `unknown_extensions` в `extension_struct!` |
-| `rustls/src/msgs/handshake.rs` | `UnknownExtension` visibility + `CertificateExtensions::read` игнорирует unknown |
+| `rustls/src/msgs/handshake.rs` | `UnknownExtension` visibility + `CertificateExtensions::read` игнорирует unknown + SNI trailing dots patch |
 | `rustls/src/crypto/aws_lc_rs/kx_p521.rs` | Kx group SECP521R1 |
 | `rustls/src/crypto/aws_lc_rs/mod.rs` | Экспорт и добавление SECP521R1 в дефолты |
 | `rustls/src/crypto/ring/kx.rs` | `KxGroup` и `uncompressed_point` сделаны `pub(crate)` |
