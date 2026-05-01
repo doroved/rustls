@@ -27,6 +27,7 @@ fn main() {
 
     // ВАЖНО: Добавьте ALPN протоколы здесь
     // config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
     // config.no_alpn = true;
     // Установка отпечатка Chrome
     // config.fingerprint = Some(rustls::TlsFingerprint::Chrome);
@@ -48,9 +49,9 @@ fn main() {
     // let host = "omega.bz"; // !!! решено IllegalParameter, т.к. была неправильная обработка HRR (HelloRetryRequest)
     // let host = "app-files.trelica.com"; // !!! решено IllegalParameter, т.к. была неправильная обработка HRR (HelloRetryRequest)
     // let host = "fazhzcezbdj.xh8007l.ws"; // InternalError | Похоже проблема в том, что сервер поддерживает только TLS 1.2
-    // let host = "officeci-mauservice.azurewebsites.net"; // !!! решено  IllegalHelloRetryRequestWithUnofferedNamedGroup
+    let host = "officeci-mauservice.azurewebsites.net"; // !!! решено  IllegalHelloRetryRequestWithUnofferedNamedGroup
     // let host = "mobile.events.data.microsoft.com"; // Этот по идее работает, нужна проверка
-    let host = "appservicelandingpage.trafficmanager.net"; // !!! решено IllegalHelloRetryRequestWithUnofferedNamedGroup
+    // let host = "appservicelandingpage.trafficmanager.net"; // !!! решено IllegalHelloRetryRequestWithUnofferedNamedGroup
 
     // let host = "speed.cloudflare.com"; // http/1.1, Поддерживает ECH
     // let host = "www.youtube.com"; //
