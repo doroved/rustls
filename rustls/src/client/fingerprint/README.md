@@ -132,7 +132,7 @@ JA4-отпечаток: `t13d2014h2_a09f3c656075_e42f34c56612`
 2. **server_name** (SNI) — если присутствует
 3. **extended_master_secret** (пустой)
 4. **renegotiation_info** (пустой)
-5. **supported_groups** — `[GREASE, X25519, secp256r1, secp384r1, secp521r1]`
+5. **supported_groups** — `[GREASE, X25519, secp256r1, secp384r1, secp521r1]` (P-521 добавлен как полноценный kx group)
 6. **ec_point_formats** (uncompressed)
 7. **ALPN** — `[h2, http/1.1]` (только если пользователь не сконфигурировал ALPN)
 8. **status_request** (OCSP)
@@ -302,6 +302,33 @@ fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
 
 ---
 
+## Поддержка SECP521R1 (P-521)
+
+Safari's `supported_groups` включает `secp521r1` (тип `0x0019`). В стандартном rustls 0.23.40 P-521 не поддерживается как kx group (только как enum-значение). Добавлена реализация через aws-lc-rs:
+
+**Файл:** `rustls/src/crypto/aws_lc_rs/kx_p521.rs`
+```rust
+pub static SECP521R1: &dyn SupportedKxGroup = &KxGroup {
+    name: NamedGroup::secp521r1,
+    agreement_algorithm: &agreement::ECDH_P521,
+    fips_allowed: true,
+    pub_key_validator: uncompressed_point,
+};
+```
+
+**Файл:** `rustls/src/crypto/ring/kx.rs`
+- `KxGroup` и `uncompressed_point` сделаны `pub(crate)` для использования из aws-lc-rs
+
+**Файл:** `rustls/src/crypto/aws_lc_rs/mod.rs`
+Добавлено `SECP521R1` в:
+- `kx_group` re-exports
+- `DEFAULT_KX_GROUPS` (после SECP384R1)
+- `ALL_KX_GROUPS` (после SECP384R1)
+
+Это позволяет rustls выполнять реальный key exchange на P-521, если сервер запросит эту группу (например, через HRR).
+
+---
+
 ## Важные детали реализации
 
 ### Очистка `session_ticket`
@@ -378,5 +405,8 @@ let config = ClientConfig::builder()
 | `rustls/src/client/hs.rs` | Применение fingerprint + фикс ALPN-трекинга |
 | `rustls/src/msgs/macros.rs` | Поддержка `unknown_extensions` в `extension_struct!` |
 | `rustls/src/msgs/handshake.rs` | `UnknownExtension` visibility + `CertificateExtensions::read` игнорирует unknown |
+| `rustls/src/crypto/aws_lc_rs/kx_p521.rs` | Kx group SECP521R1 |
+| `rustls/src/crypto/aws_lc_rs/mod.rs` | Экспорт и добавление SECP521R1 в дефолты |
+| `rustls/src/crypto/ring/kx.rs` | `KxGroup` и `uncompressed_point` сделаны `pub(crate)` |
 | `rustls/src/lib.rs` | Экспорт fingerprint модулей |
 | `examples/src/bin/safari_fingerprint.rs` | Пример-бинарник |
