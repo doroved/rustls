@@ -73,6 +73,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier,
                 client_ech_mode: self.state.client_ech_mode,
+                fingerprint: None,
             },
             provider: self.provider,
             time_provider: self.time_provider,
@@ -113,6 +114,7 @@ pub(super) mod danger {
                     versions: self.cfg.state.versions,
                     verifier,
                     client_ech_mode: self.cfg.state.client_ech_mode,
+                    fingerprint: None,
                 },
                 provider: self.cfg.provider,
                 time_provider: self.cfg.time_provider,
@@ -131,6 +133,7 @@ pub struct WantsClientCert {
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
     client_ech_mode: Option<EchMode>,
+    fingerprint: Option<Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
@@ -155,6 +158,15 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// Do not support client auth.
     pub fn with_no_client_auth(self) -> ClientConfig {
         self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
+    }
+
+    /// Sets a [`ClientHelloFingerprinter`] to modify the ClientHello before sending.
+    pub fn with_fingerprint(
+        mut self,
+        fingerprint: Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>,
+    ) -> Self {
+        self.state.fingerprint = Some(fingerprint);
+        self
     }
 
     /// Sets a custom [`ResolvesClientCert`].
@@ -185,6 +197,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             ech_mode: self.state.client_ech_mode,
+            fingerprint: self.state.fingerprint,
         }
     }
 }

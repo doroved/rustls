@@ -287,6 +287,9 @@ pub struct ClientConfig {
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
     pub(super) ech_mode: Option<EchMode>,
+
+    /// Optional fingerprinter to modify ClientHello before sending.
+    pub(super) fingerprint: Option<Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>>,
 }
 
 impl ClientConfig {

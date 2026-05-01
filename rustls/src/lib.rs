@@ -584,6 +584,10 @@ pub mod client {
     mod client_conn;
     mod common;
     mod ech;
+
+    /// Browser fingerprint support for emulating specific TLS clients.
+    pub mod fingerprint;
+
     pub(super) mod handy;
     mod hs;
     #[cfg(test)]
@@ -616,11 +620,14 @@ pub mod client {
         ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
         verify_server_cert_signed_by_trust_anchor, verify_server_name,
     };
+
+    pub use fingerprint::{ClientHelloFingerprinter, safari::SafariFingerprint};
 }
 
 pub use client::ClientConfig;
 #[cfg(feature = "std")]
 pub use client::ClientConnection;
+pub use client::SafariFingerprint;
 
 /// Items for use in a server.
 pub mod server {

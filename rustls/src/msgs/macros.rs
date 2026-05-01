@@ -133,7 +133,9 @@ macro_rules! extension_struct {
             $(#[$meta_attr:meta])*
             $meta_vis:vis $meta_slot:ident : $meta_ty:ty,
           )+
-        })*
+        })* $(unknown {
+          $unknown_vis:vis $unknown_field:ident,
+        })?
     ) => {
         $(#[doc = $comment])*
         #[non_exhaustive]
@@ -147,6 +149,7 @@ macro_rules! extension_struct {
               $(#[$meta_attr])*
               $meta_vis $meta_slot: $meta_ty,
             )+)*
+            $($unknown_vis $unknown_field: Vec<crate::msgs::handshake::UnknownExtension>,)?
         }
 
         impl<'a> $struct_name$(<$struct_lt>)* {
@@ -174,6 +177,7 @@ macro_rules! extension_struct {
             /// Returns `true` if handled, `false` otherwise.
             ///
             /// `r` is fully consumed if `typ` is unhandled.
+            #[allow(unreachable_code)]
             fn read_extension_body(
                 &mut self,
                 typ: ExtensionType,
@@ -186,6 +190,11 @@ macro_rules! extension_struct {
 
                    // read and ignore unhandled extensions
                    _ => {
+                       $(
+                           let payload = crate::msgs::base::Payload::read(r).into_owned();
+                           self.$unknown_field.push(crate::msgs::handshake::UnknownExtension { typ, payload });
+                           return Ok(true);
+                       )?
                        r.rest();
                        return Ok(false);
                    }
@@ -216,6 +225,13 @@ macro_rules! extension_struct {
                 typ: ExtensionType,
                 output: &mut Vec<u8>,
             ) {
+                $(
+                    if let Some(ext) = self.$unknown_field.iter().find(|e| e.typ == typ) {
+                        typ.encode(output);
+                        ext.encode(LengthPrefixedBuffer::new(ListLength::U16, output).buf);
+                        return;
+                    }
+                )?
                 match typ {
                     $(
                         $item_id => if let Some(item) = &self.$item_slot {
@@ -238,6 +254,11 @@ macro_rules! extension_struct {
                         r.push($item_id);
                     }
                 )*
+                $(
+                    for ext in &self.$unknown_field {
+                        r.push(ext.typ);
+                    }
+                )?
 
                 r
             }

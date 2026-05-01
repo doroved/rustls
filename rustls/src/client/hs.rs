@@ -420,6 +420,17 @@ fn emit_client_hello_for_retry(
         _ => {}
     }
 
+    // Apply browser fingerprint if configured.
+    if let Some(fp) = &config.fingerprint {
+        fp.apply(&mut chp_payload, retryreq.is_some());
+
+        // Update ALPN tracking to match what fingerprint actually sent,
+        // so ALPN validation against ServerHello uses the correct list.
+        if let Some(protocols) = &chp_payload.extensions.protocols {
+            input.hello.alpn_protocols = protocols.clone();
+        }
+    }
+
     // Note what extensions we sent.
     input.hello.sent_extensions = chp_payload.collect_used();
 

@@ -199,11 +199,11 @@ pub struct UnknownExtension {
 }
 
 impl UnknownExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) {
         self.payload.encode(bytes);
     }
 
-    fn read(typ: ExtensionType, r: &mut Reader<'_>) -> Self {
+    pub(crate) fn read(typ: ExtensionType, r: &mut Reader<'_>) -> Self {
         let payload = Payload::read(r).into_owned();
         Self { typ, payload }
     }
@@ -933,6 +933,8 @@ extension_struct! {
 
         /// Extensions that must appear contiguously.
         pub(crate) contiguous_extensions: Vec<ExtensionType>,
+    } unknown {
+        pub(crate) unknown_extensions,
     }
 }
 
@@ -964,6 +966,7 @@ impl ClientExtensions<'_> {
             encrypted_client_hello_outer,
             order_seed,
             contiguous_extensions,
+            unknown_extensions,
         } = self;
         ClientExtensions {
             server_name: server_name.map(|x| x.into_owned()),
@@ -991,6 +994,7 @@ impl ClientExtensions<'_> {
             encrypted_client_hello_outer,
             order_seed,
             contiguous_extensions,
+            unknown_extensions,
         }
     }
 
@@ -1704,7 +1708,8 @@ impl<'a> Codec<'a> for CertificateExtensions<'a> {
 
         while sub.any_left() {
             out.read_one(&mut sub, |_unk| {
-                Err(InvalidMessage::UnknownCertificateExtension)
+                // Ignore unknown certificate extensions (e.g., SCT)
+                Ok(())
             })?;
         }
 
