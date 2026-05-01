@@ -429,14 +429,6 @@ fn emit_client_hello_for_retry(
         if let Some(protocols) = &chp_payload.extensions.protocols {
             input.hello.alpn_protocols = protocols.clone();
         }
-
-        // If fingerprint added certificate compression algorithms but config has no decompressors,
-        // we still need to tell the state machine to expect CompressedCertificate messages.
-        if input.hello.offered_cert_compression == false
-            && chp_payload.extensions.certificate_compression_algorithms.is_some()
-        {
-            input.hello.offered_cert_compression = true;
-        }
     }
 
     // Note what extensions we sent.
