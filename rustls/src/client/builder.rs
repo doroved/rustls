@@ -1,3 +1,4 @@
+use alloc::vec;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
@@ -74,6 +75,8 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 verifier,
                 client_ech_mode: self.state.client_ech_mode,
                 fingerprint: None,
+                cert_compressors: None,
+                cert_decompressors: None,
             },
             provider: self.provider,
             time_provider: self.time_provider,
@@ -115,6 +118,8 @@ pub(super) mod danger {
                     verifier,
                     client_ech_mode: self.cfg.state.client_ech_mode,
                     fingerprint: None,
+                    cert_compressors: None,
+                    cert_decompressors: None,
                 },
                 provider: self.cfg.provider,
                 time_provider: self.cfg.time_provider,
@@ -134,6 +139,8 @@ pub struct WantsClientCert {
     verifier: Arc<dyn verify::ServerCertVerifier>,
     client_ech_mode: Option<EchMode>,
     fingerprint: Option<Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>>,
+    cert_compressors: Option<Vec<&'static dyn compress::CertCompressor>>,
+    cert_decompressors: Option<Vec<&'static dyn compress::CertDecompressor>>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
@@ -166,6 +173,18 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         fingerprint: Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>,
     ) -> Self {
         self.state.fingerprint = Some(fingerprint);
+
+        // Add SECP521R1 to kx_groups for fingerprinting
+        let mut provider = (*self.provider).clone();
+        provider
+            .kx_groups
+            .push(crate::crypto::aws_lc_rs::kx_group::SECP521R1);
+        self.provider = Arc::new(provider);
+
+        // Add zlib certificate compression support when fingerprinting.
+        self.state.cert_compressors = Some(vec![compress::ZLIB_COMPRESSOR]);
+        self.state.cert_decompressors = Some(vec![compress::ZLIB_DECOMPRESSOR]);
+
         self
     }
 
@@ -193,9 +212,15 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             #[cfg(feature = "tls12")]
             require_ems,
             time_provider: self.time_provider,
-            cert_compressors: compress::default_cert_compressors().to_vec(),
+            cert_compressors: self
+                .state
+                .cert_compressors
+                .unwrap_or_default(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
-            cert_decompressors: compress::default_cert_decompressors().to_vec(),
+            cert_decompressors: self
+                .state
+                .cert_decompressors
+                .unwrap_or_default(),
             ech_mode: self.state.client_ech_mode,
             fingerprint: self.state.fingerprint,
         }

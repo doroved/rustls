@@ -252,7 +252,6 @@ pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,
-    kx_group::SECP521R1,
     #[cfg(not(feature = "prefer-post-quantum"))]
     kx_group::X25519MLKEM768,
 ];
@@ -266,7 +265,6 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,
-    kx_group::SECP521R1,
     #[cfg(not(feature = "prefer-post-quantum"))]
     kx_group::X25519MLKEM768,
     #[cfg(not(feature = "prefer-post-quantum"))]

@@ -6,7 +6,7 @@
 
 Основной use case — эмуляция **Safari на macOS / WebKit на iOS** для совпадения с JA4-отпечатками и прохождения TLS fingerprinting-проверок, которые используют некоторые серверы.
 
-**Ключевой принцип проектирования:** Fingerprinting — **opt-in** (подключается явно) — стандартное поведение rustls полностью сохраняется, когда fingerprinter не сконфигурирован.
+**Ключевой принцип проектирования:** Fingerprinting — **opt-in** (подключается явно). Все fingerprint-специфичные модификации (cipher suites, порядок расширений, GREASE, дополнительные kx groups, certificate compression) применяются **только** при вызове `.with_fingerprint()`. Без него rustls ведёт себя идентично upstream `v/0.23.40`.
 
 ---
 
@@ -14,13 +14,17 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        ClientConfig                          │
+│  ConfigBuilder::with_fingerprint()                           │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  fingerprint: Option<Arc<dyn ClientHelloFingerprinter>>│  │
+│  │ 1. Клонировать CryptoProvider                       │   │
+│  │ 2. Добавить SECP521R1 в kx_groups                   │   │
+│  │ 3. Установить cert_compressors = [ZLIB]             │   │
+│  │ 4. Установить cert_decompressors = [ZLIB]           │   │
+│  │ 5. Сохранить fingerprint в state                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    client/hs.rs (строка ~420)                │
 │  После того как rustls построил дефолтный ClientHelloPayload:│
@@ -132,7 +136,7 @@ JA4-отпечаток: `t13d2014h2_a09f3c656075_e42f34c56612`
 2. **server_name** (SNI) — если присутствует
 3. **extended_master_secret** (пустой)
 4. **renegotiation_info** (пустой)
-5. **supported_groups** — `[GREASE, X25519, secp256r1, secp384r1, secp521r1]` (P-521 добавлен как полноценный kx group)
+5. **supported_groups** — `[GREASE, X25519, secp256r1, secp384r1, secp521r1]` (P-521 добавляется динамически через `.with_fingerprint()`)
 6. **ec_point_formats** (uncompressed)
 7. **ALPN** — `[h2, http/1.1]` (только если пользователь не сконфигурировал ALPN)
 8. **status_request** (OCSP)
@@ -141,7 +145,7 @@ JA4-отпечаток: `t13d2014h2_a09f3c656075_e42f34c56612`
 11. **key_share** — `[GREASE, X25519]` в CH1, группа, запрошенная сервером, в CH2
 12. **psk_key_exchange_modes** (`psk_dhe: true`)
 13. **supported_versions** — кастомное кодирование с TLS 1.3, 1.2, 1.1, 1.0 + GREASE
-14. **compress_certificate** (только zlib)
+14. **compress_certificate** (только zlib) — добавляется только при `.with_fingerprint()`
 15. **Второе GREASE extension** (payload: `[0x00]`) — **другой тип, чем у первого GREASE**
 16. **padding** (переменная длина для достижения 512-байтового TLS-записи)
 
@@ -250,6 +254,18 @@ pub fn with_fingerprint(
     fingerprint: Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>,
 ) -> Self {
     self.state.fingerprint = Some(fingerprint);
+
+    // Добавить SECP521R1 в kx_groups для fingerprinting
+    let mut provider = (*self.provider).clone();
+    provider
+        .kx_groups
+        .push(crate::crypto::aws_lc_rs::kx_group::SECP521R1);
+    self.provider = Arc::new(provider);
+
+    // Добавить zlib certificate compression
+    self.state.cert_compressors = Some(vec![compress::ZLIB_COMPRESSOR]);
+    self.state.cert_decompressors = Some(vec![compress::ZLIB_DECOMPRESSOR]);
+
     self
 }
 ```
@@ -261,6 +277,11 @@ let config = ClientConfig::builder()
     .with_fingerprint(Arc::new(SafariFingerprint))
     .with_no_client_auth();
 ```
+
+**Без `.with_fingerprint()`**:
+- `kx_groups` = upstream default (без secp521r1)
+- `cert_compressors/decompressors` = пустые (без compress_certificate в CH)
+- Поведение идентично `v/0.23.40`
 
 ### 2. Применение в Handshake
 
@@ -281,7 +302,7 @@ if let Some(fp) = &config.fingerprint {
 
 **Фикс ALPN-трекинга:** Без этого rustls валидировал бы выбранный ALPN из ServerHello против изначально сконфигурированного ALPN, а не против модифицированного fingerprint, что приводило к ошибкам согласования.
 
-### 3. Фикс Certificate Extensions
+### 3. Фикс Certificate Extensions (глобальный)
 
 В `msgs/handshake.rs`, `CertificateExtensions::read()` был изменён для игнорирования неизвестных расширений:
 
@@ -300,7 +321,9 @@ fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
 
 Это предотвращает ошибки `UnknownCertificateExtension`, когда серверы отправляют Signed Certificate Timestamps (SCT) или другие нестандартные расширения сертификатов.
 
-### 4. Сохранение trailing dots в SNI
+**Примечание:** Это глобальный bug fix (RFC 8446 §4.2: *"Implementations MUST ignore unrecognized extensions"*), а не fingerprint-специфичное поведение. Работает независимо от `.with_fingerprint()`.
+
+### 4. Сохранение trailing dots в SNI (глобальный)
 
 В `msgs/handshake.rs` изменён `From<&DnsName>` для `ServerNamePayload`:
 
@@ -315,11 +338,13 @@ impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
 
 Стандартный rustls обрезает trailing dot в SNI (RFC6066). Этот патч сохраняет его, что позволяет использовать домены с двойной точкой в конце для обхода блокировок по SNI.
 
+**Примечание:** Это глобальный патч, работает независимо от `.with_fingerprint()`.
+
 ---
 
 ## Поддержка SECP521R1 (P-521)
 
-Safari's `supported_groups` включает `secp521r1` (тип `0x0019`). В стандартном rustls 0.23.40 P-521 не поддерживается как kx group (только как enum-значение). Добавлена реализация через aws-lc-rs:
+Safari's `supported_groups` включает `secp521r1` (тип `0x0019`). В стандартном rustls 0.23.40 P-521 не поддерживается как kx group (только как enum-значение).
 
 **Файл:** `rustls/src/crypto/aws_lc_rs/kx_p521.rs`
 ```rust
@@ -335,12 +360,19 @@ pub static SECP521R1: &dyn SupportedKxGroup = &KxGroup {
 - `KxGroup` и `uncompressed_point` сделаны `pub(crate)` для использования из aws-lc-rs
 
 **Файл:** `rustls/src/crypto/aws_lc_rs/mod.rs`
-Добавлено `SECP521R1` в:
-- `kx_group` re-exports
-- `DEFAULT_KX_GROUPS` (после SECP384R1)
-- `ALL_KX_GROUPS` (после SECP384R1)
+- `SECP521R1` экспортирован в `kx_group`
+- **Убран** из `DEFAULT_KX_GROUPS` и `ALL_KX_GROUPS` (upstream список без P-521)
 
-Это позволяет rustls выполнять реальный key exchange на P-521, если сервер запросит эту группу (например, через HRR).
+**Добавление через `.with_fingerprint()`:**
+```rust
+let mut provider = (*self.provider).clone();
+provider
+    .kx_groups
+    .push(crate::crypto::aws_lc_rs::kx_group::SECP521R1);
+self.provider = Arc::new(provider);
+```
+
+Таким образом P-521 доступен **только** при использовании fingerprint, не влияя на стандартное поведение rustls.
 
 ---
 
@@ -361,6 +393,17 @@ exts.order_seed = 0;
 exts.contiguous_extensions.clear();
 // ... затем push расширений в точном порядке Safari
 ```
+
+### Certificate Compression (только с fingerprint)
+
+Расширение `compress_certificate` добавляется в ClientHello **только** при `.with_fingerprint()`:
+
+- `cert_compressors = [ZLIB_COMPRESSOR]`
+- `cert_decompressors = [ZLIB_DECOMPRESSOR]`
+
+Без fingerprint оба списка пустые, поэтому расширение не отправляется.
+
+`zlib` остаётся в `default` features (`Cargo.toml`), но decompressor используется только при fingerprint. Это позволяет принимать `CompressedCertificate` от серверов (Facebook, Instagram), не изменяя CH без fingerprint.
 
 ### Поведение `collect_used()` vs `encode_one()`
 
@@ -412,16 +455,17 @@ let config = ClientConfig::builder()
 
 | Файл | Изменение |
 |------|-----------|
-| `rustls/Cargo.toml` | `zlib` добавлен в `default` features |
-| `rustls/src/client/fingerprint/mod.rs` | Новое определение трейта |
+| `rustls/Cargo.toml` | `zlib` в `default` features (как upstream) |
+| `rustls/src/client/fingerprint/mod.rs` | Новое определение трейта `ClientHelloFingerprinter` |
 | `rustls/src/client/fingerprint/safari.rs` | Реализация Safari fingerprint |
 | `rustls/src/client/fingerprint/grease.rs` | GREASE RNG |
-| `rustls/src/client/client_conn.rs` | Добавлено поле fingerprint в ClientConfig |
-| `rustls/src/client/builder.rs` | Builder-метод `with_fingerprint()` |
-| `rustls/src/msgs/macros.rs` | Поддержка `unknown_extensions` в `extension_struct!` |
-| `rustls/src/msgs/handshake.rs` | `UnknownExtension` visibility + `CertificateExtensions::read` игнорирует unknown + SNI trailing dots patch |
+| `rustls/src/client/client_conn.rs` | Добавлено поле `fingerprint` в `ClientConfig` |
+| `rustls/src/client/builder.rs` | `with_fingerprint()` — добавляет SECP521R1 + zlib компрессию |
+| `rustls/src/client/hs.rs` | Применение fingerprint + фикс ALPN-трекинга |
+| `rustls/src/msgs/macros.rs` | Поддержка `unknown_extensions` + проверка duplicate |
+| `rustls/src/msgs/handshake.rs` | `UnknownExtension` visibility + `CertificateExtensions::read` ignore unknown + SNI trailing dots |
 | `rustls/src/crypto/aws_lc_rs/kx_p521.rs` | Kx group SECP521R1 |
-| `rustls/src/crypto/aws_lc_rs/mod.rs` | Экспорт и добавление SECP521R1 в дефолты |
+| `rustls/src/crypto/aws_lc_rs/mod.rs` | Экспорт SECP521R1, **убран** из `DEFAULT_KX_GROUPS`/`ALL_KX_GROUPS` |
 | `rustls/src/crypto/ring/kx.rs` | `KxGroup` и `uncompressed_point` сделаны `pub(crate)` |
 | `rustls/src/lib.rs` | Экспорт fingerprint модулей |
 | `examples/src/bin/safari_fingerprint.rs` | Пример-бинарник |

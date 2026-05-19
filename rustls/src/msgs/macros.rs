@@ -191,6 +191,9 @@ macro_rules! extension_struct {
                    // read and ignore unhandled extensions
                    _ => {
                        $(
+                           if self.$unknown_field.iter().any(|e| e.typ == typ) {
+                               return Err(InvalidMessage::DuplicateExtension(u16::from(typ)));
+                           }
                            let payload = crate::msgs::base::Payload::read(r).into_owned();
                            self.$unknown_field.push(crate::msgs::handshake::UnknownExtension { typ, payload });
                            return Ok(true);
