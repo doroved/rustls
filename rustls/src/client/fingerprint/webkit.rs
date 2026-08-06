@@ -4,21 +4,21 @@ use alloc::vec::Vec;
 use super::{ClientHelloFingerprinter, GreaseRng, get_grease_value};
 use crate::enums::{CertificateCompressionAlgorithm, CipherSuite, SignatureScheme};
 use crate::msgs::base::Payload;
+use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ExtensionType, NamedGroup};
 use crate::msgs::handshake::{
-    CertificateStatusRequest, ClientHelloPayload, KeyShareEntry, ProtocolName,
-    PskKeyExchangeModes, SupportedEcPointFormats, UnknownExtension,
+    CertificateStatusRequest, ClientHelloPayload, KeyShareEntry, ProtocolName, PskKeyExchangeModes,
+    SupportedEcPointFormats, UnknownExtension,
 };
-use crate::msgs::codec::Codec;
 
-/// Emulates the TLS fingerprint of Safari on macOS / WebKit on iOS.
+/// Emulates the TLS fingerprint of WebKit (Safari on macOS / WebKit on iOS).
 ///
-/// This matches the Wireshark capture from Safari 26.0.1 on macOS Sequoia 15.7.1.
+/// This matches the Wireshark capture from WebKit / Safari 26.0.1 on macOS Sequoia 15.7.1.
 #[derive(Clone, Debug, Default)]
-pub struct SafariFingerprint;
+pub struct WebKitFingerprint;
 
 #[allow(private_interfaces)]
-impl ClientHelloFingerprinter for SafariFingerprint {
+impl ClientHelloFingerprinter for WebKitFingerprint {
     fn apply(&self, payload: &mut ClientHelloPayload, is_retry: bool) {
         // Seed RNG from session ID so GREASE values are stable across CH1/CH2.
         let mut rng = GreaseRng::from_session_id(payload.session_id.as_ref());
@@ -35,7 +35,7 @@ impl ClientHelloFingerprinter for SafariFingerprint {
             grease_ext2 = get_grease_value(&mut rng);
         }
 
-        // 1. Cipher suites — exact Safari order, 21 suites.
+        // 1. Cipher suites — exact WebKit order, 21 suites.
         payload.cipher_suites = vec![
             CipherSuite::Unknown(grease_cipher),
             CipherSuite::TLS13_AES_128_GCM_SHA256,
@@ -109,7 +109,7 @@ impl ClientHelloFingerprinter for SafariFingerprint {
             exts.contiguous_extensions
                 .push(ExtensionType::ECPointFormats);
 
-            // 2.7 ALPN — Safari always sends h2, http/1.1
+            // 2.7 ALPN — WebKit always sends h2, http/1.1
             // Only set if user hasn't explicitly configured ALPN.
             if exts.protocols.is_none() {
                 exts.protocols = Some(vec![
@@ -155,7 +155,8 @@ impl ClientHelloFingerprinter for SafariFingerprint {
                 if !is_retry {
                     // CH1: keep only x25519, prepend GREASE
                     shares.retain(|s| s.group == NamedGroup::X25519);
-                    let grease_entry = KeyShareEntry::new(NamedGroup::Unknown(grease_group), vec![0x00]);
+                    let grease_entry =
+                        KeyShareEntry::new(NamedGroup::Unknown(grease_group), vec![0x00]);
                     shares.insert(0, grease_entry);
                 }
                 // CH2: rustls already has the requested group only — leave it.

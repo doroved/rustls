@@ -621,13 +621,16 @@ pub mod client {
         verify_server_cert_signed_by_trust_anchor, verify_server_name,
     };
 
-    pub use fingerprint::{ClientHelloFingerprinter, safari::SafariFingerprint};
+    pub use fingerprint::{
+        ClientHelloFingerprinter, chrome::ChromeFingerprint, webkit::WebKitFingerprint,
+    };
 }
 
+pub use client::ChromeFingerprint;
 pub use client::ClientConfig;
 #[cfg(feature = "std")]
 pub use client::ClientConnection;
-pub use client::SafariFingerprint;
+pub use client::WebKitFingerprint;
 
 /// Items for use in a server.
 pub mod server {

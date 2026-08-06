@@ -1,7 +1,7 @@
 /// GREASE values according to RFC 8701.
 pub(crate) const GREASE_VALUES: [u16; 16] = [
-    0x0A0A, 0x1A1A, 0x2A2A, 0x3A3A, 0x4A4A, 0x5A5A, 0x6A6A, 0x7A7A, 0x8A8A, 0x9A9A, 0xAAAA,
-    0xBABA, 0xCACA, 0xDADA, 0xEAEA, 0xFAFA,
+    0x0A0A, 0x1A1A, 0x2A2A, 0x3A3A, 0x4A4A, 0x5A5A, 0x6A6A, 0x7A7A, 0x8A8A, 0x9A9A, 0xAAAA, 0xBABA,
+    0xCACA, 0xDADA, 0xEAEA, 0xFAFA,
 ];
 
 /// Simple RNG seeded from session ID bytes for stable GREASE values across a handshake.
@@ -14,9 +14,11 @@ impl GreaseRng {
         let mut seed = [0u8; 8];
         let len = session_id.len().min(8);
         seed[..len].copy_from_slice(&session_id[..len]);
-        Self {
-            state: u64::from_be_bytes(seed),
+        let mut state = u64::from_be_bytes(seed);
+        if state == 0 {
+            state = 0x9E37_79B9_7F4A_7C15; // Non-zero default state
         }
+        Self { state }
     }
 
     fn next_u32(&mut self) -> u32 {
@@ -24,7 +26,10 @@ impl GreaseRng {
         self.state ^= self.state >> 12;
         self.state ^= self.state << 25;
         self.state ^= self.state >> 27;
-        ((self.state.wrapping_mul(0x2545_F491_4F6C_DD1D)) >> 32) as u32
+        ((self
+            .state
+            .wrapping_mul(0x2545_F491_4F6C_DD1D))
+            >> 32) as u32
     }
 
     pub(crate) fn next_usize(&mut self, max: usize) -> usize {

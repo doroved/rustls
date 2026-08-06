@@ -14,10 +14,18 @@ pub trait ClientHelloFingerprinter: Send + Sync + 'static + core::fmt::Debug {
     /// * `payload` — the default rustls ClientHello, ready to be modified.
     /// * `is_retry` — `true` if this is a ClientHello sent in response to a HelloRetryRequest.
     fn apply(&self, payload: &mut ClientHelloPayload, is_retry: bool);
+
+    /// Returns `true` if this browser fingerprint sends ECH GREASE by default.
+    fn wants_ech_grease(&self) -> bool {
+        false
+    }
 }
 
 /// Browser fingerprint implementations.
-pub mod safari;
+/// Google Chrome TLS fingerprint emulation.
+pub mod chrome;
+/// WebKit (Safari / iOS) TLS fingerprint emulation.
+pub mod webkit;
 
 mod grease;
-pub(crate) use grease::{get_grease_value, GreaseRng};
+pub(crate) use grease::{GreaseRng, get_grease_value};

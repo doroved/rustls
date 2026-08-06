@@ -1,18 +1,18 @@
-//! Пример использования Safari fingerprint с rustls.
+//! Пример использования WebKit (Safari / iOS) fingerprint с rustls.
 //!
-//! Этот пример демонстрирует, как эмулировать TLS-отпечаток Safari
+//! Этот пример демонстрирует, как эмулировать TLS-отпечаток WebKit (Safari)
 //! при подключении к HTTPS-сайтам.
 //!
 //! Запуск:
 //! ```bash
-//! cargo run --bin safari_fingerprint -- <hostname>
+//! cargo run --bin webkit_fingerprint -- <hostname>
 //! ```
 
 use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, RootCertStore, SafariFingerprint};
+use rustls::{ClientConfig, RootCertStore, WebKitFingerprint};
 
 fn main() {
     let hostname = std::env::args()
@@ -28,7 +28,7 @@ fn main() {
 
     let config = ClientConfig::builder()
         .with_root_certificates(root_store)
-        .with_fingerprint(Arc::new(SafariFingerprint))
+        .with_fingerprint(Arc::new(WebKitFingerprint))
         .with_no_client_auth();
 
     let server_name = hostname.try_into().unwrap();

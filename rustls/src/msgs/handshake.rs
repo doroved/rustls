@@ -1006,15 +1006,29 @@ impl ClientExtensions<'_> {
         if self
             .encrypted_client_hello_outer
             .is_some()
+            && !self
+                .contiguous_extensions
+                .contains(&ExtensionType::EncryptedClientHelloOuterExtensions)
         {
             exts.push(ExtensionType::EncryptedClientHelloOuterExtensions);
         }
-        if self.encrypted_client_hello.is_some() {
+
+        if self.encrypted_client_hello.is_some()
+            && !self
+                .contiguous_extensions
+                .contains(&ExtensionType::EncryptedClientHello)
+        {
             exts.push(ExtensionType::EncryptedClientHello);
         }
-        if self.preshared_key_offer.is_some() {
+
+        if self.preshared_key_offer.is_some()
+            && !self
+                .contiguous_extensions
+                .contains(&ExtensionType::PreSharedKey)
+        {
             exts.push(ExtensionType::PreSharedKey);
         }
+
         exts
     }
 
@@ -1093,6 +1107,7 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
     }
 }
 
+#[allow(dead_code)]
 fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static> {
     let dns_name_str = dns_name.as_ref();
 

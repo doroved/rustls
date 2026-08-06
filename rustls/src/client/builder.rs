@@ -1,4 +1,3 @@
-use alloc::vec;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
@@ -172,6 +171,20 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         mut self,
         fingerprint: Arc<dyn crate::client::fingerprint::ClientHelloFingerprinter>,
     ) -> Self {
+        // Automatically configure ECH GREASE if the fingerprinter requests it and no ECH mode is set.
+        if self.state.client_ech_mode.is_none() && fingerprint.wants_ech_grease() {
+            #[cfg(feature = "aws_lc_rs")]
+            {
+                use crate::crypto::hpke::Hpke;
+                let hpke_suite = crate::crypto::aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
+                if let Ok((public_key, _)) = hpke_suite.generate_key_pair() {
+                    self.state.client_ech_mode = Some(EchMode::Grease(
+                        crate::client::EchGreaseConfig::new(hpke_suite, public_key),
+                    ));
+                }
+            }
+        }
+
         self.state.fingerprint = Some(fingerprint);
 
         // Add SECP521R1 to kx_groups for fingerprinting
@@ -181,9 +194,9 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             .push(crate::crypto::aws_lc_rs::kx_group::SECP521R1);
         self.provider = Arc::new(provider);
 
-        // Add zlib certificate compression support when fingerprinting.
-        self.state.cert_compressors = Some(vec![compress::ZLIB_COMPRESSOR]);
-        self.state.cert_decompressors = Some(vec![compress::ZLIB_DECOMPRESSOR]);
+        // Add available certificate compression/decompression support when fingerprinting.
+        self.state.cert_compressors = Some(compress::default_cert_compressors().to_vec());
+        self.state.cert_decompressors = Some(compress::default_cert_decompressors().to_vec());
 
         self
     }

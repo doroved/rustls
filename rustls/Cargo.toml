@@ -14,8 +14,31 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 build = "build.rs"
 
+[package.metadata.docs.rs]
+# all non-default features except fips (cannot build on docs.rs environment)
+features = ["read_buf", "ring"]
+rustdoc-args = ["--cfg", "rustls_docsrs"]
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  # ---
+  "rustls_pki_types",
+  "rustls_pki_types::*",
+]
+
+[package.metadata.cargo-semver-checks.lints]
+enum_no_repr_variant_discriminant_changed = "warn"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  "cfg(bench)",
+  "cfg(coverage_nightly)",
+  "cfg(read_buf)",
+  "cfg(rustls_docsrs)",
+] }
+
 [features]
-default = ["aws_lc_rs", "logging", "prefer-post-quantum", "std", "tls12", "zlib"]
+default = ["aws_lc_rs", "brotli", "logging", "prefer-post-quantum", "std", "tls12", "zlib"]
 
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
@@ -110,26 +133,3 @@ path = "tests/runners/server_cert_verifier.rs"
 [[test]]
 name = "unbuffered"
 path = "tests/runners/unbuffered.rs"
-
-[package.metadata.docs.rs]
-# all non-default features except fips (cannot build on docs.rs environment)
-features = ["read_buf", "ring"]
-rustdoc-args = ["--cfg", "rustls_docsrs"]
-
-[package.metadata.cargo_check_external_types]
-allowed_external_types = [
-  # ---
-  "rustls_pki_types",
-  "rustls_pki_types::*",
-]
-
-[package.metadata.cargo-semver-checks.lints]
-enum_no_repr_variant_discriminant_changed = "warn"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-  "cfg(bench)",
-  "cfg(coverage_nightly)",
-  "cfg(read_buf)",
-  "cfg(rustls_docsrs)",
-] }
