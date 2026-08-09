@@ -26,10 +26,11 @@ fn main() {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = ClientConfig::builder()
+    let mut config = ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_fingerprint(Arc::new(WebKitFingerprint))
         .with_no_client_auth();
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
 
     let server_name = hostname.try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();

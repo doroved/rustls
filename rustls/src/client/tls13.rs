@@ -311,20 +311,30 @@ pub(super) fn initial_key_share(
     server_name: &ServerName<'_>,
     kx_state: &mut KxState,
 ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-    let group = config
-        .resumption
-        .store
-        .kx_hint(server_name)
-        .and_then(|group_name| config.find_kx_group(group_name, ProtocolVersion::TLSv1_3))
-        .unwrap_or_else(|| {
-            config
-                .provider
-                .kx_groups
-                .iter()
-                .copied()
-                .next()
-                .expect("No kx groups configured")
-        });
+    let ignore_hint = config
+        .fingerprint
+        .as_ref()
+        .map(|fp| fp.ignores_kx_hint())
+        .unwrap_or(false);
+
+    let group = if !ignore_hint {
+        config
+            .resumption
+            .store
+            .kx_hint(server_name)
+            .and_then(|group_name| config.find_kx_group(group_name, ProtocolVersion::TLSv1_3))
+    } else {
+        None
+    }
+    .unwrap_or_else(|| {
+        config
+            .provider
+            .kx_groups
+            .iter()
+            .copied()
+            .next()
+            .expect("No kx groups configured")
+    });
 
     *kx_state = KxState::Start(group);
     group.start()

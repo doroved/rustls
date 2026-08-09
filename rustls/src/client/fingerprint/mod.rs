@@ -19,6 +19,12 @@ pub trait ClientHelloFingerprinter: Send + Sync + 'static + core::fmt::Debug {
     fn wants_ech_grease(&self) -> bool {
         false
     }
+
+    /// Returns `true` if this browser fingerprint ignores resumption `kx_hint`
+    /// to ensure initial ClientHello key_shares always match the browser's exact initial offer.
+    fn ignores_kx_hint(&self) -> bool {
+        true
+    }
 }
 
 /// Browser fingerprint implementations.
