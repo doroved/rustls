@@ -1,3 +1,6 @@
+use alloc::vec::Vec;
+
+use crate::crypto::SupportedKxGroup;
 use crate::msgs::handshake::ClientHelloPayload;
 
 /// A trait for modifying [`ClientHelloPayload`] to emulate a specific browser fingerprint.
@@ -20,10 +23,18 @@ pub trait ClientHelloFingerprinter: Send + Sync + 'static + core::fmt::Debug {
         false
     }
 
-    /// Returns `true` if this browser fingerprint ignores resumption `kx_hint`
-    /// to ensure initial ClientHello key_shares always match the browser's exact initial offer.
-    fn ignores_kx_hint(&self) -> bool {
-        true
+    /// Returns additional `kx_groups` that this fingerprint requires in the provider,
+    /// and optionally a group name that should be moved to position 0.
+    ///
+    /// The first element of the tuple is a list of extra groups to append.
+    /// The second element is the `NamedGroup` that should be first (for `initial_key_share`).
+    fn kx_group_fixups(
+        &self,
+    ) -> (
+        Vec<&'static dyn SupportedKxGroup>,
+        Option<crate::msgs::enums::NamedGroup>,
+    ) {
+        (Vec::new(), None)
     }
 }
 

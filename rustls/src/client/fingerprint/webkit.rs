@@ -19,6 +19,14 @@ pub struct WebKitFingerprint;
 
 #[allow(private_interfaces)]
 impl ClientHelloFingerprinter for WebKitFingerprint {
+    fn kx_group_fixups(
+        &self,
+    ) -> (
+        Vec<&'static dyn crate::crypto::SupportedKxGroup>,
+        Option<NamedGroup>,
+    ) {
+        (vec![crate::crypto::aws_lc_rs::kx_group::SECP521R1], None)
+    }
     fn apply(&self, payload: &mut ClientHelloPayload, is_retry: bool) {
         // Seed RNG from session ID so GREASE values are stable across CH1/CH2.
         let mut rng = GreaseRng::from_session_id(payload.session_id.as_ref());

@@ -185,13 +185,33 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             }
         }
 
-        self.state.fingerprint = Some(fingerprint);
+        // Apply kx_group fixups from the fingerprint
+        let (extra_groups, preferred_group) = fingerprint.kx_group_fixups();
 
-        // Add SECP521R1 to kx_groups for fingerprinting
+        self.state.fingerprint = Some(fingerprint);
         let mut provider = (*self.provider).clone();
-        provider
-            .kx_groups
-            .push(crate::crypto::aws_lc_rs::kx_group::SECP521R1);
+
+        for group in extra_groups {
+            if !provider
+                .kx_groups
+                .iter()
+                .any(|g| g.name() == group.name())
+            {
+                provider.kx_groups.push(group);
+            }
+        }
+
+        if let Some(preferred) = preferred_group {
+            if let Some(pos) = provider
+                .kx_groups
+                .iter()
+                .position(|g| g.name() == preferred)
+            {
+                let group = provider.kx_groups.remove(pos);
+                provider.kx_groups.insert(0, group);
+            }
+        }
+
         self.provider = Arc::new(provider);
 
         // Add available certificate compression/decompression support when fingerprinting.

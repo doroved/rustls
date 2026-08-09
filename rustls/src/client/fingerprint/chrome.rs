@@ -24,6 +24,15 @@ impl ClientHelloFingerprinter for ChromeFingerprint {
         true
     }
 
+    fn kx_group_fixups(
+        &self,
+    ) -> (
+        Vec<&'static dyn crate::crypto::SupportedKxGroup>,
+        Option<NamedGroup>,
+    ) {
+        (Vec::new(), Some(NamedGroup::X25519MLKEM768))
+    }
+
     fn apply(&self, payload: &mut ClientHelloPayload, is_retry: bool) {
         // Seed RNG from session ID / random so GREASE values and extension order
         // vary across connections but remain stable across CH1/CH2 retries.
