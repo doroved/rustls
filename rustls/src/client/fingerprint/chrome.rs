@@ -30,7 +30,10 @@ impl ClientHelloFingerprinter for ChromeFingerprint {
         Vec<&'static dyn crate::crypto::SupportedKxGroup>,
         Option<NamedGroup>,
     ) {
-        (Vec::new(), Some(NamedGroup::X25519MLKEM768))
+        (
+            vec![crate::crypto::aws_lc_rs::kx_group::X25519MLKEM768],
+            Some(NamedGroup::X25519MLKEM768),
+        )
     }
 
     fn apply(&self, payload: &mut ClientHelloPayload, is_retry: bool) {
